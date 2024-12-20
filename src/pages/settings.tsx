@@ -1,34 +1,81 @@
-import { useState } from 'react'
-import Layout from '@/components/common/Layout'
+import { useState, useEffect } from 'react'
+import { useToast } from '@/components/ui/Toast/ToastContext'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
-import Button from '@/components/ui/Button'
-import Select from '@/components/ui/Select'
-import { useToast } from '@/components/ui/Toast/ToastContext'
+import Layout from '@/components/common/Layout'
+import { getAuth } from 'firebase/auth'
+import QRCode from 'qrcode'
+import { verifyTOTP, isTOTPEnabled } from '@/services/totp'
+
+type TOTPStatus = 'disabled' | 'generating' | 'enabled'
 
 export default function Settings() {
   const { showToast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
-  const [settings, setSettings] = useState({
-    name: 'John Doe',
-    email: 'john@example.com',
-    language: { id: 'en', label: 'English', value: 'en' },
-    notifications: { id: 'all', label: 'All notifications', value: 'all' },
-    theme: { id: 'light', label: 'Light', value: 'light' }
-  })
+  const [totpStatus, setTotpStatus] = useState<TOTPStatus>('disabled')
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
+  const [secret, setSecret] = useState<string>('')
+  const [verificationCode, setVerificationCode] = useState<string>('')
+  const auth = getAuth()
+  const user = auth.currentUser
 
-  const handleSave = async () => {
-    setIsLoading(true)
+  const generateTOTPSecret = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      showToast('Success', 'Settings saved successfully', 'success')
+      setIsLoading(true)
+      
+      // Generate base32 secret
+      const randomBuffer = new Uint8Array(20)
+      crypto.getRandomValues(randomBuffer)
+      const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+      const newSecret = Array.from(randomBuffer)
+        .map(b => base32Chars[b % 32])
+        .join('')
+      
+      // Format otpauth URL with base32 secret
+      const otpauthUrl = `otpauth://totp/${encodeURIComponent('AdminCMS')}:${encodeURIComponent(user?.email || '')}?secret=${newSecret}&issuer=${encodeURIComponent('AdminCMS')}&algorithm=SHA1&digits=6&period=30`
+      
+      const qrCode = await QRCode.toDataURL(otpauthUrl)
+      
+      setSecret(newSecret)
+      setQrCodeUrl(qrCode)
+      setTotpStatus('generating')
+      
+      showToast('Success', 'TOTP secret generated successfully', 'success')
     } catch (error) {
-      showToast('Error', 'Failed to save settings', 'error')
+      console.error('Error generating TOTP:', error)
+      showToast('Error', 'Failed to generate TOTP secret', 'error')
     } finally {
       setIsLoading(false)
     }
   }
+
+  const verifyAndEnableTOTP = async () => {
+    try {
+      setIsLoading(true)
+      const isValid = await verifyTOTP(verificationCode, secret)
+      
+      if (isValid) {
+        setTotpStatus('enabled')
+        showToast('Success', '2FA enabled successfully', 'success')
+      } else {
+        showToast('Error', 'Invalid verification code', 'error')
+      }
+    } catch (error) {
+      console.error('Error verifying TOTP:', error)
+      showToast('Error', 'Failed to verify code', 'error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const checkTOTPStatus = async () => {
+      const enabled = await isTOTPEnabled()
+      setTotpStatus(enabled ? 'enabled' : 'disabled')
+    }
+    
+    checkTOTPStatus()
+  }, [])
 
   return (
     <Layout>
@@ -36,80 +83,78 @@ export default function Settings() {
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
 
         <div className="space-y-6">
-          {/* Profile Settings */}
+          {/* Two-Factor Authentication Settings */}
           <Card>
             <div className="p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Profile Settings</h2>
-              <div className="space-y-4 max-w-xl">
-                <Input
-                  label="Full Name"
-                  value={settings.name}
-                  onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-                />
-                <Input
-                  label="Email"
-                  type="email"
-                  value={settings.email}
-                  onChange={(e) => setSettings({ ...settings, email: e.target.value })}
-                />
+              <h2 className="text-lg font-medium text-gray-900 mb-4">
+                Two-Factor Authentication
+              </h2>
+              
+              <div className="space-y-4">
+                {totpStatus === 'disabled' && (
+                  <div>
+                    <p className="text-gray-600 mb-4">
+                      Enhance your account security by enabling two-factor authentication.
+                    </p>
+                    <button
+                      onClick={generateTOTPSecret}
+                      disabled={isLoading}
+                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                    >
+                      {isLoading ? 'Generating...' : 'Enable 2FA'}
+                    </button>
+                  </div>
+                )}
+
+                {totpStatus === 'generating' && (
+                  <div className="space-y-4">
+                    <div className="max-w-xs mx-auto">
+                      <img src={qrCodeUrl} alt="2FA QR Code" className="w-full" />
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-md">
+                      <p className="text-sm font-medium text-gray-900 mb-1">Secret Key:</p>
+                      <code className="text-sm bg-gray-100 p-2 rounded block break-all">
+                        {secret}
+                      </code>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600">
+                        Scan the QR code or enter the secret key in your authenticator app,
+                        then enter the verification code below.
+                      </p>
+                      <Input
+                        type="text"
+                        maxLength={6}
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value)}
+                        placeholder="Enter 6-digit code"
+                        className="w-full max-w-xs h-12 px-4 border rounded-lg focus:ring-2 focus:ring-green-500"
+                      />
+                      <button
+                        onClick={verifyAndEnableTOTP}
+                        disabled={isLoading || verificationCode.length !== 6}
+                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+                      >
+                        Verify and Enable
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {totpStatus === 'enabled' && (
+                  <div className="bg-green-50 p-4 rounded-md">
+                    <p className="text-green-800">
+                      ✓ Two-factor authentication is enabled
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
 
-          {/* Preferences */}
-          <Card>
-            <div className="p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Preferences</h2>
-              <div className="space-y-4 max-w-xl">
-                <Select
-                  label="Language"
-                  value={settings.language}
-                  onChange={(value) => setSettings({ ...settings, language: value as { id: string; label: string; value: string } })}
-                  options={[
-                    { id: 'en', label: 'English', value: 'en' },
-                    { id: 'es', label: 'Spanish', value: 'es' },
-                    { id: 'fr', label: 'French', value: 'fr' }
-                  ]}
-                />
-                <Select
-                  label="Notification Settings"
-                  value={settings.notifications}
-                  onChange={(value) => setSettings({ ...settings, notifications: value as { id: string; label: string; value: string } })}
-                  options={[
-                    { id: 'all', label: 'All notifications', value: 'all' },
-                    { id: 'important', label: 'Important only', value: 'important' },
-                    { id: 'none', label: 'None', value: 'none' }
-                  ]}
-                />
-                <Select
-                  label="Theme"
-                  value={settings.theme}
-                  onChange={(value) => setSettings({ ...settings, theme: value as { id: string; label: string; value: string } })}
-                  options={[
-                    { id: 'light', label: 'Light', value: 'light' },
-                    { id: 'dark', label: 'Dark', value: 'dark' },
-                    { id: 'system', label: 'System', value: 'system' }
-                  ]}
-                />
-              </div>
-            </div>
-          </Card>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-4">
-            <Button variant="secondary" onClick={() => setSettings({
-              name: 'John Doe',
-              email: 'john@example.com',
-              language: { id: 'en', label: 'English', value: 'en' },
-              notifications: { id: 'all', label: 'All notifications', value: 'all' },
-              theme: { id: 'light', label: 'Light', value: 'light' }
-            })}>
-              Reset
-            </Button>
-            <Button onClick={handleSave} disabled={isLoading}>
-              {isLoading ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
+          {/* Other settings cards */}
         </div>
       </div>
     </Layout>
