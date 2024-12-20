@@ -7,6 +7,7 @@ import {
   InformationCircleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import ToastProgress from './ToastProgress'
 
 const icons = {
   success: CheckCircleIcon,
@@ -20,13 +21,6 @@ const styles = {
   error: 'bg-white border-red-500 text-red-800',
   warning: 'bg-white border-yellow-500 text-yellow-800',
   info: 'bg-white border-blue-500 text-blue-800',
-}
-
-const progressStyles = {
-  success: 'bg-green-500',
-  error: 'bg-red-500',
-  warning: 'bg-yellow-500',
-  info: 'bg-blue-500',
 }
 
 const iconStyles = {
@@ -49,41 +43,6 @@ interface ToastContainerProps {
 }
 
 const TOAST_DURATION = 5000 // 5 seconds
-
-function ToastProgress({ type, onComplete }: { type: keyof typeof progressStyles, onComplete: () => void }) {
-  const [progress, setProgress] = useState(100)
-
-  useEffect(() => {
-    const startTime = Date.now()
-    const endTime = startTime + TOAST_DURATION
-
-    const updateProgress = () => {
-      const now = Date.now()
-      const remaining = endTime - now
-      const newProgress = (remaining / TOAST_DURATION) * 100
-
-      if (remaining <= 0) {
-        onComplete()
-        return
-      }
-
-      setProgress(Math.max(0, newProgress))
-      requestAnimationFrame(updateProgress)
-    }
-
-    const animationFrame = requestAnimationFrame(updateProgress)
-    return () => cancelAnimationFrame(animationFrame)
-  }, [onComplete])
-
-  return (
-    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 rounded-b-lg overflow-hidden">
-      <div
-        className={`h-full transition-all duration-100 ${progressStyles[type]}`}
-        style={{ width: `${progress}%` }}
-      />
-    </div>
-  )
-}
 
 export default function ToastContainer({ toasts, setToasts }: ToastContainerProps) {
   return (
@@ -147,7 +106,8 @@ export default function ToastContainer({ toasts, setToasts }: ToastContainerProp
                 type={toast.type} 
                 onComplete={() => {
                   setToasts((prev) => prev.filter((t) => t.id !== toast.id))
-                }} 
+                }}
+                duration={TOAST_DURATION}
               />
             </div>
           </Transition>

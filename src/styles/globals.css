@@ -17,3 +17,51 @@
     @apply rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50;
   }
 } 
+
+/* Add these classes to your existing global styles */
+.dense-layout .p-6 {
+  padding: 1rem !important;
+}
+
+.dense-layout .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1rem !important;
+}
+
+.dense-layout .text-2xl {
+  font-size: 1.25rem !important;
+  line-height: 1.75rem !important;
+}
+
+.dense-layout .text-lg {
+  font-size: 1rem !important;
+  line-height: 1.5rem !important;
+}
+
+.dense-layout .mb-6 {
+  margin-bottom: 1rem !important;
+}
+
+.dense-layout .mb-4 {
+  margin-bottom: 0.75rem !important;
+}
+
+.dense-layout .py-10 {
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+}
+
+/* Adjust padding in dense mode */
+.dense-layout .px-4 {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.dense-layout .sm\:px-6 {
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+}
+
+.dense-layout .lg\:px-8 {
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+}
